@@ -37,10 +37,26 @@ bool gameOverPlayed = false;
 bool musicPlaying = false;
 int musicStep = 0;
 unsigned long musicTimer = 0;
+int selectedMusic = 0; // 0 = victory, 2 = spider-man
 
 int melody[] = {1000, 1400, 1800, 1400, 1800, 2200};
 int duration[] = {150, 150, 200, 150, 200, 300};
 int melodySize = 6;
+
+// ---------- SPIDER-MAN THEME ----------
+int spiderMelody[] = {
+  659, 784, 880, 784, 659, 523, 587,
+  659, 784, 880, 988, 880, 784, 659,
+  523, 587, 659, 784, 659, 523
+};
+
+int spiderDuration[] = {
+  120,120,120,120,140,140,160,
+  120,120,120,140,120,120,160,
+  140,140,140,140,160,200
+};
+
+int spiderSize = 20;
 
 // ---------- PLAYER ----------
 float angle = 0;
@@ -105,20 +121,27 @@ void drawMainMenu() {
 void drawMusicMenu() {
 
   int p = analogRead(POT_PIN);
-  musicMenuIndex = map(p, 0, 4095, 0, 1);
+  musicMenuIndex = map(p, 0, 4095, 0, 2);
 
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
 
-  display.setCursor(25,10);
+  // TITLE
+  display.setCursor(25, 10);
   display.println("MUSIC");
 
-  display.setCursor(10,35);
-  display.println(musicMenuIndex==0 ? "> VICTORY TUNE" : "  VICTORY TUNE");
+  // ITEM 1
+  display.setCursor(10, 25);
+  display.println(musicMenuIndex == 0 ? "> VICTORY TUNE" : "  VICTORY TUNE");
 
-  display.setCursor(115,0);
-  display.print(musicMenuIndex==1 ? "X" : "x");
+  // ITEM 2
+  display.setCursor(10, 40);
+  display.println(musicMenuIndex == 1 ? "> SPIDER-MAN" : "  SPIDER-MAN");
+
+  // EXIT ITEM (логічний, але не в списку)
+  display.setCursor(115, 0);
+  display.println(musicMenuIndex == 2 ? "X" : "x");
 
   display.display();
 }
@@ -128,13 +151,27 @@ void updateMusic() {
 
   if (!musicPlaying) return;
 
-  if (millis() - musicTimer > (unsigned long)duration[musicStep]) {
+  int freq;
+  int dur;
+
+  if (selectedMusic == 2) {
+    freq = spiderMelody[musicStep];
+    dur = spiderDuration[musicStep];
+  } else {
+    freq = melody[musicStep];
+    dur = duration[musicStep];
+  }
+
+  if (millis() - musicTimer > (unsigned long)dur) {
 
     musicTimer = millis();
-    tone(BUZZER, melody[musicStep], duration[musicStep]);
+    tone(BUZZER, freq, dur);
 
     musicStep++;
-    if (musicStep >= melodySize) musicStep = 0;
+
+    int size = (selectedMusic == 2) ? spiderSize : melodySize;
+
+    if (musicStep >= size) musicStep = 0;
   }
 }
 
@@ -308,20 +345,39 @@ void loop() {
     drawMusicMenu();
     updateMusic();
 
-    if(btn==LOW&&lastBtn==HIGH){
+if(btn==LOW && lastBtn==HIGH){
 
-      if(musicMenuIndex==0){
-        musicPlaying=!musicPlaying;
-        if(musicPlaying){ musicStep=0; musicTimer=millis(); }
-        else noTone(BUZZER);
-      }
+  if(musicMenuIndex == 0){
+    selectedMusic = 0;
+    musicPlaying = !musicPlaying;
 
-      if(musicMenuIndex==1){
-        musicPlaying=false;
-        noTone(BUZZER);
-        gameState=-1;
-      }
+    if(musicPlaying){
+      musicStep = 0;
+      musicTimer = millis();
+    } else {
+      noTone(BUZZER);
     }
+  }
+
+  else if(musicMenuIndex == 1){
+    selectedMusic = 2;
+    musicPlaying = !musicPlaying;
+
+    if(musicPlaying){
+      musicStep = 0;
+      musicTimer = millis();
+    } else {
+      noTone(BUZZER);
+    }
+  }
+
+  else if(musicMenuIndex == 2){
+    musicPlaying = false;
+    noTone(BUZZER);
+    gameState = -1;
+  }
+}
+
   }
 
   // ARCADE MENU
