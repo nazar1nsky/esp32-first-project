@@ -16,8 +16,8 @@ Preferences prefs;
 #define BUZZER 14
 
 // ---------- GAME ----------
-int gameState = 0;
-int gameMode = 0;   // 0 = levels, 1 = endless
+int gameState = -1; // -1 MAIN MENU
+int gameMode = 0;
 int menuIndex = 0;
 
 int level = 1;
@@ -64,6 +64,47 @@ void gameOverS() {
   tone(BUZZER, 200, 300);
 }
 
+// ================= MAIN MENU =================
+void drawMainMenu() {
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  display.setCursor(20,10);
+  display.println("MAIN MENU");
+
+  display.setCursor(20,35);
+  display.println("> ARCADE GAME");
+
+  display.display();
+}
+
+// ================= ARCADE MENU =================
+void drawMenu() {
+
+  int p = analogRead(POT_PIN);
+  menuIndex = map(p, 0, 4095, 0, 2);
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  display.setCursor(25,10);
+  display.println("ARCADE GAME");
+
+  display.setCursor(20,30);
+  display.println(menuIndex==0 ? "> LEVELS" : "  LEVELS");
+
+  display.setCursor(20,45);
+  display.println(menuIndex==1 ? "> ENDLESS" : "  ENDLESS");
+
+  display.setCursor(115,0);
+  display.print(menuIndex==2 ? "X" : "x");
+
+  display.display();
+}
+
 // ================= LEVEL =================
 void loadLevel(int l) {
 
@@ -101,8 +142,6 @@ void loadLevel(int l) {
     tx[0]=20; ty[0]=20;
     tx[1]=64; ty[1]=25;
     tx[2]=100; ty[2]=20;
-    moveX = 0;
-    dir = true;
   }
 }
 
@@ -111,10 +150,8 @@ void shoot() {
   bullet = true;
   bx = px;
   by = py;
-
   bdx = cos(angle) * 3;
   bdy = sin(angle) * 3;
-
   shootS();
 }
 
@@ -208,28 +245,6 @@ void drawBullet() {
     display.fillCircle((int)bx, (int)by, 2, WHITE);
 }
 
-// ================= MENU =================
-void drawMenu() {
-
-  int p = analogRead(POT_PIN);
-  menuIndex = map(p, 0, 4095, 0, 1);
-
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-
-  display.setCursor(25,10);
-  display.println("ARCADE GAME");
-
-  display.setCursor(20,30);
-  display.println(menuIndex==0 ? "> LEVELS" : "  LEVELS");
-
-  display.setCursor(20,45);
-  display.println(menuIndex==1 ? "> ENDLESS" : "  ENDLESS");
-
-  display.display();
-}
-
 // ================= SETUP =================
 void setup() {
 
@@ -246,24 +261,38 @@ void loop() {
 
   bool btn = digitalRead(BUTTON);
 
-  if (gameState == 0) {
+  // MAIN MENU
+  if (gameState == -1) {
+
+    drawMainMenu();
+
+    if (btn == LOW && lastBtn == HIGH)
+      gameState = 0;
+  }
+
+  // ARCADE MENU
+  else if (gameState == 0) {
+
     drawMenu();
 
     if (btn == LOW && lastBtn == HIGH) {
-      gameMode = menuIndex;
-      score = 0;
-      lives = 3;
-      level = 1;
-      gameState = 1;
+
+      if (menuIndex == 2) {
+        gameState = -1;
+      } else {
+        gameMode = menuIndex;
+        score = 0;
+        lives = 3;
+        level = 1;
+        gameState = 1;
+      }
     }
   }
 
+  // START
   else if (gameState == 1) {
 
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-
     display.setCursor(40,25);
 
     if (gameMode == 0) {
@@ -280,6 +309,7 @@ void loop() {
     gameState = 2;
   }
 
+  // GAME
   else if (gameState == 2) {
 
     int pot = analogRead(POT_PIN);
@@ -309,19 +339,15 @@ void loop() {
       }
 
       if (level == 5) {
-
         int baseY[3] = {20, 25, 20};
         static int vx[3] = {1, -1, 1};
 
         for (int i=0;i<3;i++) {
           if (alive[i]) {
-
             tx[i] += vx[i];
-
             if (tx[i] > 120) vx[i] = -1;
             if (tx[i] < 0) vx[i] = 1;
-
-            ty[i] = baseY[i] + sin(millis()*0.007 + i)*5;
+            ty[i] = baseY[i] + sin(millis()*0.007 + i) * 5;
           }
         }
       }
@@ -378,18 +404,10 @@ void loop() {
     }
   }
 
+  // WIN
   else if (gameState == 3) {
 
-    static bool played = false;
-    if (!played) {
-      winS();
-      played = true;
-    }
-
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-
     display.setCursor(35,20);
     display.println("YOU WIN!");
 
@@ -398,24 +416,14 @@ void loop() {
 
     display.display();
 
-    if (btn == LOW && lastBtn == HIGH) {
-      played = false;
+    if (btn == LOW && lastBtn == HIGH)
       gameState = 0;
-    }
   }
 
+  // GAME OVER
   else if (gameState == 4) {
 
-    static bool played = false;
-    if (!played) {
-      gameOverS();
-      played = true;
-    }
-
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-
     display.setCursor(30,20);
     display.println("GAME OVER");
 
@@ -424,10 +432,8 @@ void loop() {
 
     display.display();
 
-    if (btn == LOW && lastBtn == HIGH) {
-      played = false;
+    if (btn == LOW && lastBtn == HIGH)
       gameState = 0;
-    }
   }
 
   lastBtn = btn;
