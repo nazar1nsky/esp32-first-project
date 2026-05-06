@@ -19,6 +19,8 @@ Preferences prefs;
 int gameState = -1; // -1 MAIN MENU
 int gameMode = 0;
 int menuIndex = 0;
+int mainMenuIndex = 0;
+int musicMenuIndex = 0;
 
 int level = 1;
 int score = 0;
@@ -26,6 +28,19 @@ int highScore = 0;
 int lives = 3;
 
 bool lastBtn = HIGH;
+
+// ---------- FLAGS ----------
+bool winPlayed = false;
+bool gameOverPlayed = false;
+
+// ---------- MUSIC ----------
+bool musicPlaying = false;
+int musicStep = 0;
+unsigned long musicTimer = 0;
+
+int melody[] = {1000, 1400, 1800, 1400, 1800, 2200};
+int duration[] = {150, 150, 200, 150, 200, 300};
+int melodySize = 6;
 
 // ---------- PLAYER ----------
 float angle = 0;
@@ -67,6 +82,9 @@ void gameOverS() {
 // ================= MAIN MENU =================
 void drawMainMenu() {
 
+  int p = analogRead(POT_PIN);
+  mainMenuIndex = map(p, 0, 4095, 0, 1);
+
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -74,10 +92,50 @@ void drawMainMenu() {
   display.setCursor(20,10);
   display.println("MAIN MENU");
 
-  display.setCursor(20,35);
-  display.println("> ARCADE GAME");
+  display.setCursor(10,30);
+  display.println(mainMenuIndex==0 ? "> ARCADE GAME" : "  ARCADE GAME");
+
+  display.setCursor(10,45);
+  display.println(mainMenuIndex==1 ? "> MUSIC" : "  MUSIC");
 
   display.display();
+}
+
+// ================= MUSIC MENU =================
+void drawMusicMenu() {
+
+  int p = analogRead(POT_PIN);
+  musicMenuIndex = map(p, 0, 4095, 0, 1);
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  display.setCursor(25,10);
+  display.println("MUSIC");
+
+  display.setCursor(10,35);
+  display.println(musicMenuIndex==0 ? "> VICTORY TUNE" : "  VICTORY TUNE");
+
+  display.setCursor(115,0);
+  display.print(musicMenuIndex==1 ? "X" : "x");
+
+  display.display();
+}
+
+// ================= MUSIC UPDATE =================
+void updateMusic() {
+
+  if (!musicPlaying) return;
+
+  if (millis() - musicTimer > (unsigned long)duration[musicStep]) {
+
+    musicTimer = millis();
+    tone(BUZZER, melody[musicStep], duration[musicStep]);
+
+    musicStep++;
+    if (musicStep >= melodySize) musicStep = 0;
+  }
 }
 
 // ================= ARCADE MENU =================
@@ -110,32 +168,19 @@ void loadLevel(int l) {
 
   for (int i = 0; i < 3; i++) alive[i] = true;
 
-  if (l == 1) {
-    tx[0]=35; ty[0]=35;
-    tx[1]=64; ty[1]=30;
-    tx[2]=95; ty[2]=35;
-  }
-
-  if (l == 2) {
-    tx[0]=20; ty[0]=10;
-    tx[1]=64; ty[1]=8;
-    tx[2]=110; ty[2]=10;
-  }
+  if (l == 1) { tx[0]=35; ty[0]=35; tx[1]=64; ty[1]=30; tx[2]=95; ty[2]=35; }
+  if (l == 2) { tx[0]=20; ty[0]=10; tx[1]=64; ty[1]=8; tx[2]=110; ty[2]=10; }
 
   if (l == 3) {
     tx[0]=0; ty[0]=15;
-    alive[1]=false;
-    alive[2]=false;
-    moveX = 0;
-    dir = true;
+    alive[1]=false; alive[2]=false;
+    moveX=0; dir=true;
   }
 
   if (l == 4) {
     tx[0]=64; ty[0]=20;
-    alive[1]=false;
-    alive[2]=false;
-    moveX = 64;
-    dir = true;
+    alive[1]=false; alive[2]=false;
+    moveX=64; dir=true;
   }
 
   if (l == 5) {
@@ -165,20 +210,17 @@ void updateBullet() {
 
   bool hit = false;
 
-  for (int i = 0; i < 3; i++) {
+  for (int i=0;i<3;i++) {
     if (alive[i]) {
-      float d = sqrt(pow(bx - tx[i],2) + pow(by - ty[i],2));
+      float d = sqrt(pow(bx-tx[i],2)+pow(by-ty[i],2));
       if (d < 5) {
-
-        alive[i] = false;
+        alive[i]=false;
         score++;
         hitS();
-        hit = true;
+        hit=true;
 
-        explosion = true;
-        ex = tx[i];
-        ey = ty[i];
-        expFrame = 6;
+        explosion=true;
+        ex=tx[i]; ey=ty[i]; expFrame=6;
 
         if (score > highScore) {
           highScore = score;
@@ -188,18 +230,16 @@ void updateBullet() {
     }
   }
 
-  if (bx < 0 || bx > 128 || by < 0 || by > 64) {
-
+  if (bx<0||bx>128||by<0||by>64) {
     if (!hit) {
       missS();
-      if (gameMode == 0) lives--;
-      if (gameMode == 1) gameState = 4;
+      if (gameMode==0) lives--;
+      if (gameMode==1) gameState=4;
     }
-
-    bullet = false;
+    bullet=false;
   }
 
-  if (hit) bullet = false;
+  if (hit) bullet=false;
 }
 
 // ================= DRAW =================
@@ -210,155 +250,161 @@ void drawPlayer() {
   float pxv = -dy;
   float pyv = dx;
 
-  display.fillCircle(px, py, 3, WHITE);
-  display.drawCircle(px, py-1, 4, WHITE);
+  display.fillCircle(px,py,3,WHITE);
+  display.drawCircle(px,py-1,4,WHITE);
 
-  float gunX = px + dx*2;
-  float gunY = py + dy*2;
+  float gx=px+dx*2;
+  float gy=py+dy*2;
 
-  display.drawLine(gunX, gunY,
-                   gunX + dx*12 + pxv, gunY + dy*12 + pyv, WHITE);
-
-  display.drawLine(gunX, gunY,
-                   gunX + dx*12 - pxv, gunY + dy*12 - pyv, WHITE);
+  display.drawLine(gx,gy,gx+dx*12+pxv,gy+dy*12+pyv,WHITE);
+  display.drawLine(gx,gy,gx+dx*12-pxv,gy+dy*12-pyv,WHITE);
 }
 
 void drawExplosion() {
   if (!explosion) return;
-
-  display.drawCircle(ex, ey, expFrame, WHITE);
-  display.drawCircle(ex, ey, expFrame/2, WHITE);
-
+  display.drawCircle(ex,ey,expFrame,WHITE);
+  display.drawCircle(ex,ey,expFrame/2,WHITE);
   expFrame--;
-  if (expFrame <= 0) explosion = false;
+  if (expFrame<=0) explosion=false;
 }
 
 void drawTargets() {
-  for (int i = 0; i < 3; i++) {
-    if (alive[i])
-      display.drawCircle(tx[i], ty[i], 3, WHITE);
-  }
+  for (int i=0;i<3;i++)
+    if (alive[i]) display.drawCircle(tx[i],ty[i],3,WHITE);
 }
 
 void drawBullet() {
-  if (bullet)
-    display.fillCircle((int)bx, (int)by, 2, WHITE);
+  if (bullet) display.fillCircle((int)bx,(int)by,2,WHITE);
 }
 
 // ================= SETUP =================
 void setup() {
-
   Wire.begin(21,22);
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  pinMode(BUTTON, INPUT_PULLUP);
-
-  prefs.begin("game", false);
-  highScore = prefs.getInt("high", 0);
+  display.begin(SSD1306_SWITCHCAPVCC,0x3C);
+  pinMode(BUTTON,INPUT_PULLUP);
+  prefs.begin("game",false);
+  highScore=prefs.getInt("high",0);
 }
 
 // ================= LOOP =================
 void loop() {
 
-  bool btn = digitalRead(BUTTON);
+  bool btn=digitalRead(BUTTON);
 
   // MAIN MENU
-  if (gameState == -1) {
+  if(gameState==-1){
 
     drawMainMenu();
 
-    if (btn == LOW && lastBtn == HIGH)
-      gameState = 0;
+    if(btn==LOW&&lastBtn==HIGH){
+      if(mainMenuIndex==0) gameState=0;
+      if(mainMenuIndex==1) gameState=5;
+    }
+  }
+
+  // MUSIC
+  else if(gameState==5){
+
+    drawMusicMenu();
+    updateMusic();
+
+    if(btn==LOW&&lastBtn==HIGH){
+
+      if(musicMenuIndex==0){
+        musicPlaying=!musicPlaying;
+        if(musicPlaying){ musicStep=0; musicTimer=millis(); }
+        else noTone(BUZZER);
+      }
+
+      if(musicMenuIndex==1){
+        musicPlaying=false;
+        noTone(BUZZER);
+        gameState=-1;
+      }
+    }
   }
 
   // ARCADE MENU
-  else if (gameState == 0) {
+  else if(gameState==0){
 
     drawMenu();
 
-    if (btn == LOW && lastBtn == HIGH) {
-
-      if (menuIndex == 2) {
-        gameState = -1;
-      } else {
-        gameMode = menuIndex;
-        score = 0;
-        lives = 3;
-        level = 1;
-        gameState = 1;
+    if(btn==LOW&&lastBtn==HIGH){
+      if(menuIndex==2) gameState=-1;
+      else{
+        gameMode=menuIndex;
+        score=0; lives=3; level=1;
+        gameState=1;
       }
     }
   }
 
   // START
-  else if (gameState == 1) {
+  else if(gameState==1){
 
     display.clearDisplay();
     display.setCursor(40,25);
 
-    if (gameMode == 0) {
-      display.print("LEVEL ");
-      display.print(level);
-    } else {
-      display.print("ENDLESS");
-    }
+    if(gameMode==0){ display.print("LEVEL "); display.print(level); }
+    else display.print("ENDLESS");
 
     display.display();
     delay(900);
 
     loadLevel(level);
-    gameState = 2;
+    gameState=2;
   }
 
   // GAME
-  else if (gameState == 2) {
+  else if(gameState==2){
 
-    int pot = analogRead(POT_PIN);
-    angle = map(pot,0,4095,-314,0)/100.0;
+    int pot=analogRead(POT_PIN);
+    angle=map(pot,0,4095,-314,0)/100.0;
 
-    if (btn == LOW && lastBtn == HIGH && !bullet)
-      shoot();
+    if(btn==LOW&&lastBtn==HIGH&&!bullet) shoot();
 
     updateBullet();
 
-    if (gameMode == 0) {
+    // FIXED LEVEL LOGIC
+    if(gameMode==0){
 
-      if (level == 3 && alive[0]) {
-        moveX += dir ? 1 : -1;
-        if (moveX > 120) dir = false;
-        if (moveX < 0) dir = true;
-        tx[0] = moveX;
+      if(level==3 && alive[0]){
+        moveX+=dir?1:-1;
+        if(moveX>120) dir=false;
+        if(moveX<0) dir=true;
+        tx[0]=moveX;
       }
 
-      if (level == 4 && alive[0]) {
-        moveX += dir ? 1 : -1;
-        if (moveX > 120) dir = false;
-        if (moveX < 0) dir = true;
-
-        tx[0] = moveX;
-        ty[0] = 20 + sin(millis()*0.007)*9;
+      if(level==4 && alive[0]){
+        moveX+=dir?1:-1;
+        if(moveX>120) dir=false;
+        if(moveX<0) dir=true;
+        tx[0]=moveX;
+        ty[0]=20+sin(millis()*0.007)*9;
       }
 
-      if (level == 5) {
-        int baseY[3] = {20, 25, 20};
-        static int vx[3] = {1, -1, 1};
+      if(level==5){
+        int baseY[3]={20,25,20};
+        static int vx[3]={1,-1,1};
 
-        for (int i=0;i<3;i++) {
-          if (alive[i]) {
-            tx[i] += vx[i];
-            if (tx[i] > 120) vx[i] = -1;
-            if (tx[i] < 0) vx[i] = 1;
-            ty[i] = baseY[i] + sin(millis()*0.007 + i) * 5;
+        for(int i=0;i<3;i++){
+          if(alive[i]){
+            tx[i]+=vx[i];
+            if(tx[i]>120) vx[i]=-1;
+            if(tx[i]<0) vx[i]=1;
+            ty[i]=baseY[i]+sin(millis()*0.007+i)*5;
           }
         }
       }
     }
 
-    if (gameMode == 1) {
-      for (int i = 0; i < 3; i++) {
-        if (!alive[i]) {
-          tx[i] = random(10,118);
-          ty[i] = random(10,40);
-          alive[i] = true;
+    // FIXED ENDLESS
+    if(gameMode==1){
+      for(int i=0;i<3;i++){
+        if(!alive[i]){
+          tx[i]=random(10,118);
+          ty[i]=random(10,50);
+          alive[i]=true;
         }
       }
     }
@@ -366,19 +412,16 @@ void loop() {
     display.clearDisplay();
 
     display.setCursor(0,0);
-    display.print("S:");
-    display.print(score);
+    display.print("S:"); display.print(score);
 
-    if (gameMode == 1) {
-      display.setCursor(95,0);
-      display.print("H:");
-      display.print(highScore);
+    if(gameMode==1){
+      display.setCursor(90,0);
+      display.print("H:"); display.print(highScore);
     }
 
-    if (gameMode == 0) {
+    if(gameMode==0){
       display.setCursor(90,0);
-      display.print("HP:");
-      display.print(lives);
+      display.print("HP:"); display.print(lives);
     }
 
     drawPlayer();
@@ -388,54 +431,64 @@ void loop() {
 
     display.display();
 
-    if (gameMode == 0) {
+    if(gameMode==0){
 
-      bool done = true;
-      for (int i=0;i<3;i++)
-        if (alive[i]) done=false;
+      bool done=true;
+      for(int i=0;i<3;i++)
+        if(alive[i]) done=false;
 
-      if (done) {
+      if(done){
         level++;
-        if (level > 5) gameState = 3;
-        else gameState = 1;
+        if(level>5) gameState=3;
+        else gameState=1;
       }
 
-      if (lives <= 0) gameState = 4;
+      if(lives<=0) gameState=4;
     }
   }
 
   // WIN
-  else if (gameState == 3) {
+  else if(gameState==3){
+
+    if(!winPlayed){
+      winS();
+      winPlayed=true;
+    }
 
     display.clearDisplay();
     display.setCursor(35,20);
     display.println("YOU WIN!");
-
     display.setCursor(10,40);
     display.println("PRESS TO MENU");
-
     display.display();
 
-    if (btn == LOW && lastBtn == HIGH)
-      gameState = 0;
+    if(btn==LOW&&lastBtn==HIGH){
+      winPlayed=false;
+      gameState=0;
+    }
   }
 
   // GAME OVER
-  else if (gameState == 4) {
+  else if(gameState==4){
+
+    if(!gameOverPlayed){
+      gameOverS();
+      gameOverPlayed=true;
+    }
 
     display.clearDisplay();
     display.setCursor(30,20);
     display.println("GAME OVER");
-
     display.setCursor(10,40);
     display.println("PRESS TO MENU");
-
     display.display();
 
-    if (btn == LOW && lastBtn == HIGH)
-      gameState = 0;
+    if(btn==LOW&&lastBtn==HIGH){
+      gameOverPlayed=false;
+      gameState=0;
+    }
   }
 
-  lastBtn = btn;
+  lastBtn=btn;
   delay(20);
 }
