@@ -17,8 +17,11 @@ Preferences prefs;
 #define LDR_PIN 34
 #define TEMP_PIN 33
 
-// ---------- INDICATORS ----------
-int lightThreshold = 2000;
+// ---------- LIGHT SENSOR SETTINGS ----------
+int lightThreshold = 2000;   // базовий рівень (калібрується)
+int darkMargin = 600;        // "ще темніше"
+int lightMargin = 400;       // "ще світліше"
+
 bool lightTriggerDark = true;
 bool lightAlarmEnabled = false;
 
@@ -363,15 +366,23 @@ void updateLightAlarm() {
 
   bool trigger = false;
 
-// DARK
-if(lightTriggerDark && light < lightThreshold){
-  trigger = true;
-}
+  // ================= DARK MODE =================
+  if(lightTriggerDark){
 
-// LIGHT
-if(!lightTriggerDark && light > lightThreshold){
-  trigger = true;
-}
+    // реагує тільки коли СУТТЄВО темніше
+    if(light < (lightThreshold - darkMargin)){
+      trigger = true;
+    }
+  }
+
+  // ================= LIGHT MODE =================
+  else{
+
+    // реагує тільки коли СУТТЄВО світліше
+    if(light > (lightThreshold + lightMargin)){
+      trigger = true;
+    }
+  }
 
   if(trigger){
     tone(BUZZER, 1200, 80);
