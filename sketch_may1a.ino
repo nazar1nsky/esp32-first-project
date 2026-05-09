@@ -113,6 +113,58 @@ unsigned long timerMillis = 0;
 
 bool timerScreenDrawn = false;
 
+// ================= PET =================
+unsigned long petTimer = 0;
+unsigned long petActionTimer = 0;
+
+int petMood = 0;
+int petAnim = 0;   // 👈 ОЦЕ ДОДАЙ
+
+int eyeOffsetX = 0;
+int eyeOffsetY = 0;
+
+bool petShake = false;
+bool petSleep = false;
+bool petSweat = false;
+
+// ---------- PET BEHAVIOR ----------
+unsigned long blinkTimer = 0;
+unsigned long lookTimer = 0;
+
+bool isBlinking = false;
+int blinkFrame = 0;
+
+int lookDir = 0; // -1 left, 0 center, 1 right
+unsigned long emotionTimer = 0;
+
+float breathe = 0;
+float faceOffsetX = 0;
+float faceOffsetY = 0;
+
+// ---------- NEW EMOTIONS ----------
+int petEmotion = 0; 
+// 0 idle (default)
+// 1 zoom eye
+// 2 eye juggling
+// 3 happy shake + hearts
+
+unsigned long emotionSwitchTimer = 0;
+int zoomEye = 0;
+int zoomEyeTarget = 0;
+
+int jugglePhase = 0;
+unsigned long juggleTimer = 0;
+
+float headShake = 0;
+bool showHearts = false;
+
+int petAnimState = 0; 
+// 0 idle
+// 1 juggle
+
+unsigned long petAnimTimer = 0;
+int juggleIndex = 0;
+
 // ---------- SOUND ----------
 void shootS() { tone(BUZZER, 1200, 40); }
 void hitS()   { tone(BUZZER, 1800, 60); }
@@ -146,9 +198,8 @@ void drawMainMenu() {
 
   int p = analogRead(POT_PIN);
 
-  mainMenuIndex = map(p, 0, 4095, 0, 4);
-
-  if(mainMenuIndex > 3) mainMenuIndex = 3;
+  mainMenuIndex = map(p, 0, 4095, 0, 5);
+  if(mainMenuIndex > 4) mainMenuIndex = 4;
 
   display.clearDisplay();
   display.setTextSize(1);
@@ -169,9 +220,122 @@ void drawMainMenu() {
   display.setCursor(0,54);
   display.println(mainMenuIndex==3 ? "> TIME" : "  TIME");
 
+  // 🆕 PET
+  display.setCursor(70,28);
+  display.println(mainMenuIndex==4 ? "> PET" : "  PET");
+
   display.display();
 }
 
+void updatePet() {
+
+  int light = analogRead(LDR_PIN);
+  petSleep = (light < 500);
+
+  // ===== BLINK (швидше + коротше) =====
+if (!petSleep && millis() - blinkTimer > random(2500, 7000)) {
+  blinkTimer = millis();
+  isBlinking = true;
+  blinkFrame = 0;
+}
+
+// швидке кліпання (2–3 кадри)
+if (isBlinking) {
+  blinkFrame++;
+
+  if (blinkFrame > 2) {   // було 5 → стало 2
+    isBlinking = false;
+  }
+}
+
+  // ===== RANDOM EMOTION =====
+  if (!petSleep && millis() - emotionTimer > 5000) {
+    emotionTimer = millis();
+
+    petAnimState = random(0, 2); // idle / juggle
+
+    if (petAnimState == 1) {
+      juggleIndex = 0;
+      petAnimTimer = millis();
+    }
+  }
+
+  // ===== JUGGLE (швидше + плавніше) =====
+  if (petAnimState == 1 && millis() - petAnimTimer > 220) {
+    petAnimTimer = millis();
+    juggleIndex = (juggleIndex + 1) % 3;
+  }
+
+  // ===== EYEBALL MICRO MOVEMENT =====
+  eyeOffsetX = sin(millis() * 0.002) * 2;
+  eyeOffsetY = cos(millis() * 0.0017) * 1;
+}
+
+void drawPet() {
+
+  display.clearDisplay();
+
+  int eyeW = 22;
+  int eyeH = 18;
+  int eyeGap = 12;
+
+  int centerX = SCREEN_WIDTH / 2;
+  int totalW = eyeW * 2 + eyeGap;
+
+  int startX = centerX - totalW / 2;
+  int eyeY = SCREEN_HEIGHT / 2 - eyeH / 2;
+
+  // ===== LOOK + MICRO MOVE =====
+  int lookX = lookDir * 2 + eyeOffsetX;
+  int lookY = eyeOffsetY;
+
+  // ===== JUGGLE (плавний) =====
+  float jL = 0, jR = 0;
+
+  if (petAnimState == 1) {
+    float t = millis() * 0.01;
+
+    jL = sin(t) * 2;
+    jR = cos(t) * 2;
+  }
+
+  int leftEyeX  = startX + lookX;
+  int rightEyeX = startX + eyeW + eyeGap + lookX;
+
+  int leftEyeY  = eyeY + lookY + jL;
+  int rightEyeY = eyeY + lookY + jR;
+
+  // ===== BLINK =====
+  if (petSleep || isBlinking) {
+
+    display.fillRect(leftEyeX, eyeY + eyeH / 2, eyeW, 3, WHITE);
+    display.fillRect(rightEyeX, eyeY + eyeH / 2, eyeW, 3, WHITE);
+
+  } else {
+
+    display.fillRect(leftEyeX, leftEyeY, eyeW, eyeH, WHITE);
+    display.fillRect(rightEyeX, rightEyeY, eyeW, eyeH, WHITE);
+  }
+
+  // ===== MOUTH (АНІМАЦІЯ) =====
+  int mouthY = eyeY + 28;
+
+  if (petSleep) {
+    display.drawLine(leftEyeX + 5, mouthY,
+                     rightEyeX + eyeW - 5, mouthY, WHITE);
+  }
+  else if (petAnimState == 1) {
+    // happy open mouth
+    display.drawCircle((leftEyeX + rightEyeX)/2 + 10, mouthY, 3, WHITE);
+  }
+  else {
+    // normal smile
+    display.drawLine(leftEyeX + 5, mouthY,
+                     rightEyeX + eyeW - 5, mouthY, WHITE);
+  }
+
+  display.display();
+}
 // ================= MUSIC MENU =================
 void drawMusicMenu() {
 
@@ -672,10 +836,16 @@ void loop() {
 
   bool btn = digitalRead(BUTTON);
 
-    updateClock();   // завжди
+  updateClock();   // завжди
   updateTimer();   // завжди
   updateMusic();   // якщо треба
   updateLightAlarm();
+  updatePet();
+
+  if(millis() - petActionTimer > 10000){
+  petActionTimer = millis();
+  petAnim = random(0,3);
+}
 
   // ===== GLOBAL TIMER ALERT (працює завжди) =====
 if(timerFinished){
@@ -722,6 +892,7 @@ if(timerFinished){
     case 5: drawMusicMenu(); break;
     case 6: drawIndicatorsMenu(); break;
     case 7: drawTimeMenu(); break;
+    case 8: drawPet(); break;
   }
   // ================= MAIN MENU =================
   if(gameState == -1){
@@ -745,8 +916,19 @@ if(timerFinished){
       else if(mainMenuIndex == 3){
         gameState = 7;
 }
+
+else if(mainMenuIndex == 4){
+  gameState = 8;
+}
     }
   }
+
+  else if(gameState == 8){
+
+  if(btn == LOW && lastBtn == HIGH){
+    gameState = -1; // вихід в меню
+  }
+}
 
   // ================= MUSIC =================
   else if(gameState == 5){
