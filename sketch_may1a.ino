@@ -91,6 +91,30 @@ bool alive[3];
 int moveX = 0;
 bool dir = true;
 
+// ---------- TIME ----------
+int timeMenuIndex = 0;
+unsigned long clockTimer = 0;
+
+bool showTimerEndScreen = false;
+
+// CLOCK
+int hours = 19;
+int minutes = 35;
+int seconds = 0;
+
+// TIMER
+bool timerRunning = false;
+bool timerFinished = false;
+
+int timerMinutes = 1;
+int timerSeconds = 0;
+
+unsigned long timerMillis = 0;
+
+bool timerScreenDrawn = false;
+
+static int lastIndex = -1;
+
 // ---------- SOUND ----------
 void shootS() { tone(BUZZER, 1200, 40); }
 void hitS()   { tone(BUZZER, 1800, 60); }
@@ -108,31 +132,44 @@ void gameOverS() {
   tone(BUZZER, 200, 300);
 }
 
+void saveTime() {
+  prefs.putInt("h", hours);
+  prefs.putInt("m", minutes);
+  prefs.putInt("s", seconds);
+}
+
+void saveTimer() {
+  prefs.putInt("tm", timerMinutes);
+  prefs.putInt("ts", timerSeconds);
+}
+
 // ================= MAIN MENU =================
 void drawMainMenu() {
 
   int p = analogRead(POT_PIN);
 
-  // 0..3 бо є 3 пункти
-  mainMenuIndex = map(p, 0, 4095, 0, 3);
+  mainMenuIndex = map(p, 0, 4095, 0, 4);
 
-  if(mainMenuIndex > 2) mainMenuIndex = 2;
+  if(mainMenuIndex > 3) mainMenuIndex = 3;
 
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
 
-  display.setCursor(25,5);
+  display.setCursor(24,0);
   display.println("MAIN MENU");
 
-  display.setCursor(0,22);
+  display.setCursor(0,14);
   display.println(mainMenuIndex==0 ? "> ARCADE GAME" : "  ARCADE GAME");
 
-  display.setCursor(0,38);
+  display.setCursor(0,28);
   display.println(mainMenuIndex==1 ? "> MUSIC" : "  MUSIC");
 
-  display.setCursor(0,54);
+  display.setCursor(0,42);
   display.println(mainMenuIndex==2 ? "> INDICATORS" : "  INDICATORS");
+
+  display.setCursor(0,54);
+  display.println(mainMenuIndex==3 ? "> TIME" : "  TIME");
 
   display.display();
 }
@@ -165,6 +202,7 @@ void drawMusicMenu() {
 
   display.display();
 }
+
 
 // ================= MUSIC UPDATE =================
 void updateMusic() {
@@ -216,7 +254,117 @@ float readTemperature() {
   return tempC;
 }
 
+void drawTimeMenu() {
 
+  int p = analogRead(POT_PIN);
+
+  timeMenuIndex = map(p, 0, 4095, 0, 3);
+  if(timeMenuIndex > 3) timeMenuIndex = 3;
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  display.setCursor(50, 0);
+  display.print("TIME");
+
+  display.setCursor(10, 12);
+  display.print("C ");
+  if(hours < 10) display.print("0");
+  display.print(hours);
+  display.print(":");
+  if(minutes < 10) display.print("0");
+  display.print(minutes);
+  display.print(":");
+  if(seconds < 10) display.print("0");
+  display.print(seconds);
+
+  display.setCursor(10, 24);
+  display.print("T ");
+  if(timerMinutes < 10) display.print("0");
+  display.print(timerMinutes);
+  display.print(":");
+  if(timerSeconds < 10) display.print("0");
+  display.print(timerSeconds);
+
+  display.setCursor(0, 40);
+  display.println(timeMenuIndex==0 ? "> TIMER +" : "  TIMER +");
+
+  display.setCursor(0, 50);
+  display.println(timeMenuIndex==1 ? "> TIMER -" : "  TIMER -");
+
+  display.setCursor(80, 40);
+  display.println(timeMenuIndex==2 ? "> START" : "  START");
+
+  display.setCursor(118, 0);
+  display.println(timeMenuIndex==3 ? "X" : "x");
+
+  display.display();
+}
+
+void drawExit(bool selected){
+  display.setCursor(118,0);
+  display.print(selected ? "X" : "x");
+}
+
+void updateClock() {
+
+  static int saveCounter = 0;
+
+  if (millis() - clockTimer >= 1000) {
+
+    clockTimer += 1000;
+
+    seconds++;
+
+    if (seconds >= 60) {
+      seconds = 0;
+      minutes++;
+    }
+
+    if (minutes >= 60) {
+      minutes = 0;
+      hours++;
+    }
+
+    if (hours >= 24) {
+      hours = 0;
+    }
+
+    saveCounter++;
+
+    if (saveCounter >= 10) {
+      saveTime();
+      saveCounter = 0;
+    }
+  }
+}
+
+void updateTimer() {
+
+  if (!timerRunning) return;
+
+  if (millis() - timerMillis >= 1000) {
+
+    timerMillis += 1000;
+
+    if (timerSeconds > 0) {
+      timerSeconds--;
+    }
+    else {
+      if (timerMinutes > 0) {
+        timerMinutes--;
+        timerSeconds = 59;
+      }
+      else {
+        timerRunning = false;
+        timerFinished = true;
+      }
+    }
+
+    saveTimer(); // 🔥 важливо
+  }
+}
 
 // ================= ARCADE MENU =================
 void drawMenu() {
@@ -469,6 +617,16 @@ if(indicatorMenuIndex == 2){
   display.display();
 }
 
+void setTime(int h, int m, int s){
+  hours = h;
+  minutes = m;
+  seconds = s;
+
+  clockTimer = millis();
+
+  saveTime(); // 🔥 щоб не скидалось після перезапуску
+}
+
   // ================= SETUP =================
 void setup() {
 
@@ -480,15 +638,40 @@ void setup() {
   analogReadResolution(12);
   analogSetPinAttenuation(TEMP_PIN, ADC_11db);
 
-  prefs.begin("game",false);
+  prefs.begin("game", false);
 
-  highScore = prefs.getInt("high",0);
+  highScore = prefs.getInt("high", 0);
+
+  // 🔥 LOAD CLOCK
+  hours = prefs.getInt("h", 19);
+  minutes = prefs.getInt("m", 35);
+  seconds = prefs.getInt("s", 0);
+
+  // 🔥 LOAD TIMER
+  timerMinutes = prefs.getInt("tm", 1);
+  timerSeconds = prefs.getInt("ts", 0);
+
+  clockTimer = millis();
+  timerMillis = millis();
 }
 
 // ================= LOOP =================
 void loop() {
 
   bool btn = digitalRead(BUTTON);
+
+    updateClock();   // завжди
+  updateTimer();   // завжди
+  updateMusic();   // якщо треба
+  updateLightAlarm();
+
+  switch(gameState){
+    case -1: drawMainMenu(); break;
+    case 0: drawMenu(); break;
+    case 5: drawMusicMenu(); break;
+    case 6: drawIndicatorsMenu(); break;
+    case 7: drawTimeMenu(); break;
+  }
   // ================= MAIN MENU =================
   if(gameState == -1){
 
@@ -507,6 +690,10 @@ void loop() {
       else if(mainMenuIndex == 2){
         gameState = 6;
       }
+
+      else if(mainMenuIndex == 3){
+        gameState = 7;
+}
     }
   }
 
@@ -568,7 +755,6 @@ void loop() {
           gameState = -1;
         }
       }
-
       // LIGHT MENU
       else if(indicatorSubMenu == 1){
 
@@ -590,6 +776,79 @@ void loop() {
       }
     }
   }
+
+// ================= TIME =================
+else if(gameState == 7){
+
+  bool btn = digitalRead(BUTTON);
+
+  // ====== ЕКРАН "TIME IS UP" ======
+  if(showTimerEndScreen){
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+
+    display.setCursor(25,20);
+    display.println("TIME IS UP!");
+
+    display.setCursor(10,40);
+    display.println("PRESS BUTTON");
+
+    display.display();
+
+    if(btn == LOW && lastBtn == HIGH){
+
+      noTone(BUZZER);
+
+      showTimerEndScreen = false;
+      timerRunning = false;
+      timerFinished = false;
+
+      timerMinutes = 1;
+      timerSeconds = 0;
+    }
+
+    lastBtn = btn;
+    delay(20);
+    return; // 🔥 ВАЖЛИВО: стопаємо звичайний рендер
+  }
+
+  // ====== ЗВИЧАЙНИЙ ЕКРАН TIME ======
+  drawTimeMenu();
+
+  updateClock();
+  updateTimer();
+
+  // ====== TIMER END DETECT ======
+  if(timerFinished){
+    showTimerEndScreen = true;
+    tone(BUZZER, 1500);
+  }
+
+  // ====== КНОПКА УПРАВЛІННЯ ======
+  if(btn == LOW && lastBtn == HIGH){
+
+    if(timeMenuIndex == 0){
+      timerMinutes++;
+      if(timerMinutes > 99) timerMinutes = 99;
+    }
+
+    else if(timeMenuIndex == 1){
+      timerMinutes--;
+      if(timerMinutes < 0) timerMinutes = 0;
+    }
+
+    else if(timeMenuIndex == 2){
+      timerRunning = !timerRunning;
+      timerMillis = millis();
+    }
+
+    else if(timeMenuIndex == 3){
+      gameState = -1;
+    }
+  }
+}
 
   // ================= ARCADE MENU =================
   else if(gameState == 0){
