@@ -113,8 +113,6 @@ unsigned long timerMillis = 0;
 
 bool timerScreenDrawn = false;
 
-static int lastIndex = -1;
-
 // ---------- SOUND ----------
 void shootS() { tone(BUZZER, 1200, 40); }
 void hitS()   { tone(BUZZER, 1800, 60); }
@@ -309,11 +307,14 @@ void drawExit(bool selected){
 
 void updateClock() {
 
-  static int saveCounter = 0;
+  static unsigned long lastMillis = 0;
 
-  if (millis() - clockTimer >= 1000) {
+  unsigned long now = millis();
 
-    clockTimer += 1000;
+  // накопичуємо реальний час
+  while (now - lastMillis >= 1000) {
+
+    lastMillis += 1000;
 
     seconds++;
 
@@ -329,13 +330,6 @@ void updateClock() {
 
     if (hours >= 24) {
       hours = 0;
-    }
-
-    saveCounter++;
-
-    if (saveCounter >= 10) {
-      saveTime();
-      saveCounter = 0;
     }
   }
 }
@@ -362,7 +356,7 @@ void updateTimer() {
       }
     }
 
-    saveTimer(); // 🔥 важливо
+    saveTimer();
   }
 }
 
@@ -633,7 +627,7 @@ void setup() {
   Wire.begin(21,22);
   display.begin(SSD1306_SWITCHCAPVCC,0x3C);
 
-  pinMode(BUTTON,INPUT_PULLUP);
+  pinMode(BUTTON, INPUT_PULLUP);
 
   analogReadResolution(12);
   analogSetPinAttenuation(TEMP_PIN, ADC_11db);
@@ -642,15 +636,33 @@ void setup() {
 
   highScore = prefs.getInt("high", 0);
 
-  // 🔥 LOAD CLOCK
+  // ================= CLOCK LOAD =================
   hours = prefs.getInt("h", 19);
   minutes = prefs.getInt("m", 35);
   seconds = prefs.getInt("s", 0);
 
-  // 🔥 LOAD TIMER
+  // 🔥 FIX: компенсація відставання (7 хв)
+  minutes += 7;
+
+  if (minutes >= 60) {
+    minutes -= 60;
+    hours++;
+  }
+
+  if (hours >= 24) {
+    hours = 0;
+  }
+
+  // 🔥 записуємо виправлений час назад у пам’ять
+  prefs.putInt("h", hours);
+  prefs.putInt("m", minutes);
+  prefs.putInt("s", seconds);
+
+  // ================= TIMER LOAD =================
   timerMinutes = prefs.getInt("tm", 1);
   timerSeconds = prefs.getInt("ts", 0);
 
+  // ================= TIMERS INIT =================
   clockTimer = millis();
   timerMillis = millis();
 }
@@ -664,6 +676,45 @@ void loop() {
   updateTimer();   // завжди
   updateMusic();   // якщо треба
   updateLightAlarm();
+
+  // ===== GLOBAL TIMER ALERT (працює завжди) =====
+if(timerFinished){
+
+  tone(BUZZER, 1500);
+
+  // НЕ даємо мигати
+  if(!timerScreenDrawn){
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+
+    display.setCursor(25,20);
+    display.println("TIME IS UP!");
+
+    display.setCursor(10,40);
+    display.println("PRESS BUTTON");
+
+    display.display();
+
+    timerScreenDrawn = true;
+  }
+
+  // кнопка скидання
+  if(btn == LOW && lastBtn == HIGH){
+
+    noTone(BUZZER);
+
+    timerFinished = false;
+    timerScreenDrawn = false;
+
+    timerMinutes = 1;
+    timerSeconds = 0;
+  }
+
+  lastBtn = btn;
+  delay(20);
+  return;   // 🔥 блокує інші режими
+}
 
   switch(gameState){
     case -1: drawMainMenu(); break;
@@ -780,7 +831,7 @@ void loop() {
 // ================= TIME =================
 else if(gameState == 7){
 
-  bool btn = digitalRead(BUTTON);
+  bool btnLocal = digitalRead(BUTTON);
 
   // ====== ЕКРАН "TIME IS UP" ======
   if(showTimerEndScreen){
@@ -820,34 +871,29 @@ else if(gameState == 7){
   updateClock();
   updateTimer();
 
-  // ====== TIMER END DETECT ======
-  if(timerFinished){
-    showTimerEndScreen = true;
-    tone(BUZZER, 1500);
-  }
-
   // ====== КНОПКА УПРАВЛІННЯ ======
-  if(btn == LOW && lastBtn == HIGH){
+ if(btn == LOW && lastBtn == HIGH){
 
-    if(timeMenuIndex == 0){
-      timerMinutes++;
-      if(timerMinutes > 99) timerMinutes = 99;
-    }
-
-    else if(timeMenuIndex == 1){
-      timerMinutes--;
-      if(timerMinutes < 0) timerMinutes = 0;
-    }
-
-    else if(timeMenuIndex == 2){
-      timerRunning = !timerRunning;
-      timerMillis = millis();
-    }
-
-    else if(timeMenuIndex == 3){
-      gameState = -1;
-    }
+  if(timeMenuIndex == 0){
+    timerMinutes++;
+    if(timerMinutes > 99) timerMinutes = 99;
   }
+
+  else if(timeMenuIndex == 1){
+    if(timerMinutes > 0) timerMinutes--;
+  }
+
+  else if(timeMenuIndex == 2){
+    timerRunning = true;
+    timerFinished = false;
+    timerScreenDrawn = false;
+    timerMillis = millis();
+  }
+
+  else if(timeMenuIndex == 3){
+    gameState = -1;
+  }
+}
 }
 
   // ================= ARCADE MENU =================
@@ -1076,6 +1122,6 @@ else if(gameState == 4){
   }
 }
 
- lastBtn = btn;
-  delay(20);
+lastBtn = btn;
+delay(20);
 }
